@@ -5,13 +5,13 @@ module AMQProxy
     getter :size
     @tls_ctx : OpenSSL::SSL::Context::Client?
 
-    def initialize(@host : String, @port : Int32, @tls : Bool, @log : Logger, @idle_connection_timeout : Int32, @metrics_client : MetricsClient = DummyMetricsClient.new)
+    def initialize(@host : String, @port : Int32, tls : Bool, @log : Logger, @idle_connection_timeout : Int32, @metrics_client : MetricsClient = DummyMetricsClient.new)
       @pools = Hash(Tuple(String, String, String), Deque(Upstream)).new do |h, k|
         h[k] = Deque(Upstream).new
       end
       @lock = Mutex.new
       @size = 0
-      @tls_ctx = OpenSSL::SSL::Context::Client.new if @tls
+      @tls_ctx = OpenSSL::SSL::Context::Client.new if tls
       spawn shrink_pool_loop, name: "shrink pool loop"
     end
 
@@ -21,7 +21,7 @@ module AMQProxy
         if c.nil? || c.closed?
           c = Upstream.new(@host, @port, @tls_ctx, @log).connect(user, password, vhost)
           @size += 1
-          c = Upstream.new(@host, @port, @tls, @log).connect(user, password, vhost)
+          c = Upstream.new(@host, @port, @tls_ctx, @log).connect(user, password, vhost)
           @metrics_client.increment("connections.upstream.created", 1)
         end
         c.current_client = client
