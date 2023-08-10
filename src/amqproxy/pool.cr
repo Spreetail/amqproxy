@@ -5,7 +5,7 @@ module AMQProxy
     getter :size
     @tls_ctx : OpenSSL::SSL::Context::Client?
 
-    def initialize(@host : String, @port : Int32, tls : Bool, @log : Logger, @idle_connection_timeout : Int32)
+    def initialize(@host : String, @port : Int32, tls : Bool, @log : Logger, @idle_connection_timeout : Int32, @metrics_client : MetricsClient = DummyMetricsClient.new)
       @pools = Hash(Tuple(String, String, String), Deque(Upstream)).new do |h, k|
         h[k] = Deque(Upstream).new
       end
@@ -21,6 +21,8 @@ module AMQProxy
         if c.nil? || c.closed?
           c = Upstream.new(@host, @port, @tls_ctx, @log).connect(user, password, vhost)
           @size += 1
+          c = Upstream.new(@host, @port, @tls_ctx, @log).connect(user, password, vhost)
+          @metrics_client.increment("connections.upstream.created", 1)
         end
         c.current_client = client
         c
@@ -70,6 +72,7 @@ module AMQProxy
                 @size -= 1
                 begin
                   u.close "Pooled connection closed due to inactivity"
+                  @metrics_client.increment("connections.upstream.closed", 1)
                 rescue ex
                   @log.error "Problem closing upstream: #{ex.inspect}"
                 end
@@ -82,6 +85,7 @@ module AMQProxy
             end
           end
         end
+        @metrics_client.gauge("connections.upstream.total", @size)
       end
     end
   end
