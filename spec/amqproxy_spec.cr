@@ -15,7 +15,7 @@ describe AMQProxy::Server do
         logger = Logger.new(STDOUT)
         logger.level = Logger::DEBUG
         statsd_client = AMQProxy::StatsdClient.new("localhost", 1234)
-        s = AMQProxy::Server.new("127.0.0.1", 5672, false, statsd_client, logger)
+        s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG, 5, statsd_client)
         begin
           spawn { s.listen("127.0.0.1", 5673) }
           Fiber.yield
@@ -47,7 +47,7 @@ describe AMQProxy::Server do
             sleep 0.1
           end
         ensure
-          s.close
+          s.stop_accepting_clients
         end
       end
     end
@@ -56,7 +56,8 @@ describe AMQProxy::Server do
   it "keeps connections open" do
     logger = Logger.new(STDOUT)
     logger.level = Logger::DEBUG
-    s = AMQProxy::Server.new("127.0.0.1", 5672, false, AMQProxy::DummyMetricsClient.new, logger)
+    
+    s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG, 5, AMQProxy::DummyMetricsClient.new)
     begin
       spawn { s.listen("127.0.0.1", 5673) }
       Fiber.yield
@@ -78,7 +79,7 @@ describe AMQProxy::Server do
   it "can reconnect if upstream closes" do
     logger = Logger.new(STDOUT)
     logger.level = Logger::DEBUG
-    s = AMQProxy::Server.new("127.0.0.1", 5672, false, AMQProxy::DummyMetricsClient.new, logger)
+    s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG, 5, AMQProxy::DummyMetricsClient.new)
     begin
       spawn { s.listen("127.0.0.1", 5673) }
       Fiber.yield
@@ -102,7 +103,7 @@ describe AMQProxy::Server do
 
   it "responds to upstream heartbeats" do
     system("#{MAYBE_SUDO}rabbitmqctl eval 'application:set_env(rabbit, heartbeat, 1).' > /dev/null").should be_true
-    s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG)
+    s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG, 5, AMQProxy::DummyMetricsClient.new)
     begin
       spawn { s.listen("127.0.0.1", 5673) }
       Fiber.yield
