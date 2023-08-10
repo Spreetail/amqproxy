@@ -21,7 +21,7 @@ module AMQProxy
         if c.nil? || c.closed?
           c = Upstream.new(@host, @port, @tls_ctx, @log).connect(user, password, vhost)
           @size += 1
-          c = Upstream.new(@host, @port, @tls, @log).connect(user, password, vhost)
+          c = Upstream.new(@host, @port, @tls_ctx, @log).connect(user, password, vhost)
           @metrics_client.increment("connections.upstream.created", 1)
         end
         c.current_client = client
