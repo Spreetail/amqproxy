@@ -14,7 +14,7 @@ describe AMQProxy::Server do
       with_server do |statsd_server|
         logger = Logger.new(STDOUT)
         logger.level = Logger::DEBUG
-        statsd_client = AMQProxy::StatsdClient.new(logger, "localhost", 1234)
+        statsd_client = AMQProxy::StatsdClient.new("localhost", 1234)
         s = AMQProxy::Server.new("127.0.0.1", 5672, false, statsd_client, logger)
         begin
           spawn { s.listen("127.0.0.1", 5673) }
