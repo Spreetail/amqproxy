@@ -1,7 +1,61 @@
 require "./spec_helper"
 
+private def with_server(& : UDPSocket ->)
+  server = UDPSocket.new
+  server.bind("localhost", 1234)
+  yield server
+ensure
+  server.close if server
+end
+
 describe AMQProxy::Server do
+  describe "statsd" do
+    it "sends client connections statsd metrics" do
+      with_server do |statsd_server|
+        logger = Logger.new(STDOUT)
+        logger.level = Logger::DEBUG
+        statsd_client = AMQProxy::StatsdClient.new("localhost", 1234)
+        s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG, 5, statsd_client)
+        begin
+          spawn { s.listen("127.0.0.1", 5673) }
+          Fiber.yield
+          i = 0
+          10.times do
+            i = i + 1
+            AMQP::Client.start("amqp://localhost:5673") do |conn|
+              conn.channel
+
+              # This is also testing that connection pooling is working
+              if i == 1
+                expected_message = "amqproxy.connections.upstream.created:1|c|@1"
+                statsd_server.gets(expected_message.bytesize).should eq expected_message
+              end
+
+              expected_message = "amqproxy.connections.client.total:1|g"
+              statsd_server.gets(expected_message.bytesize).should eq expected_message
+
+              expected_message = "amqproxy.connections.client.created:1|c|@1"
+              statsd_server.gets(expected_message.bytesize).should eq expected_message
+            end
+
+            expected_message = "amqproxy.connections.client.total:0|g"
+            statsd_server.gets(expected_message.bytesize).should eq expected_message
+
+            expected_message = "amqproxy.connections.client.disconnected:1|c|@1"
+            statsd_server.gets(expected_message.bytesize).should eq expected_message
+
+            sleep 0.1
+          end
+        ensure
+          s.stop_accepting_clients
+        end
+      end
+    end
+  end
+
   it "keeps connections open" do
+    logger = Logger.new(STDOUT)
+    logger.level = Logger::DEBUG
     s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG)
     begin
       spawn { s.listen("127.0.0.1", 5673) }
@@ -22,6 +76,8 @@ describe AMQProxy::Server do
   end
 
   it "can reconnect if upstream closes" do
+    logger = Logger.new(STDOUT)
+    logger.level = Logger::DEBUG
     s = AMQProxy::Server.new("127.0.0.1", 5672, false, Logger::DEBUG)
     begin
       spawn { s.listen("127.0.0.1", 5673) }
