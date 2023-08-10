@@ -12,7 +12,7 @@ class AMQProxy::CLI
   @log_level : Logger::Severity = Logger::INFO
   @idle_connection_timeout : Int32 = ENV.fetch("IDLE_CONNECTION_TIMEOUT", "5").to_i
   @upstream = ENV["AMQP_URL"]?
-  @statsd_host = ""
+  @statsd_host = "localhost"
   @statsd_port = 8125
 
   def parse_config(path)
