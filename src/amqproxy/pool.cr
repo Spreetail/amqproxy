@@ -1,6 +1,9 @@
+require "openssl"
+
 module AMQProxy
   class Pool
     getter :size
+    @tls_ctx : OpenSSL::SSL::Context::Client?
 
     def initialize(@host : String, @port : Int32, @tls : Bool, @log : Logger, @idle_connection_timeout : Int32, @metrics_client : MetricsClient = DummyMetricsClient.new)
       @pools = Hash(Tuple(String, String, String), Deque(Upstream)).new do |h, k|
@@ -8,31 +11,35 @@ module AMQProxy
       end
       @lock = Mutex.new
       @size = 0
+      @tls_ctx = OpenSSL::SSL::Context::Client.new if tls
       spawn shrink_pool_loop, name: "shrink pool loop"
     end
 
-    def borrow(user : String, password : String, vhost : String, &block : Upstream -> _)
+    def borrow(user : String, password : String, vhost : String, client : Client, &block : Upstream -> _)
       u = @lock.synchronize do
         c = @pools[{user, password, vhost}].pop?
         if c.nil? || c.closed?
+          c = Upstream.new(@host, @port, @tls_ctx, @log).connect(user, password, vhost)
           @size += 1
           c = Upstream.new(@host, @port, @tls, @log).connect(user, password, vhost)
           @metrics_client.increment("connections.upstream.created", 1)
         end
+        c.current_client = client
         c
       end
 
       yield u
     ensure
-      if u.nil?
-        @size -= 1
-        @log.error "Upstream connection could not be established"
-      elsif u.closed?
-        @size -= 1
-        @log.error "Upstream connection closed when returned"
-      else
-        u.last_used = Time.monotonic
-        @lock.synchronize do
+      @lock.synchronize do
+        if u.nil?
+          @size -= 1
+          @log.error "Upstream connection could not be established"
+        elsif u.closed?
+          @size -= 1
+          @log.error "Upstream connection closed when returned"
+        else
+          u.client_disconnected
+          u.last_used = Time.monotonic
           @pools[{user, password, vhost}].push u
         end
       end

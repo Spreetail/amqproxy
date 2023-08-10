@@ -5,7 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+
+## [0.8.9] - 2023-06-06
+
+- Alpine Docker image now uses user/group `amqpproxy` (1000:1000) [#107](https://github.com/cloudamqp/amqproxy/pull/107)
+
+- Require updated amq-protocol version that fixes tune negotiation issue
+
+## [0.8.8] - 2023-05-10
+
+- Same as 0.8.7 but fixes missing PCRE2 dependency in the `cloudamqp/amqproxy` Docker Hub image
+
+## [0.8.7] - 2023-05-08
+
+- Disables the Nagle algorithm on the upstream socket as well ([#113](https://github.com/cloudamqp/amqproxy/pull/113))
+- Added error handling for IO error ([#104](https://github.com/cloudamqp/amqproxy/pull/104))
+
+## [0.8.6] - 2023-03-01
+
+- Reenable TCP nodelay on the server connection, impacted performance
+
+## 0.8.3, 0.8.4, 0.8.5
+
+* 0.8.3 was tagged 2023-02-15 but a proper release was never created (release workflow failed)
+* 0.8.4 was tagged (and released) 2023-03-01 but it was built without bumping the version, so it reports 0.8.3
+* 0.8.5 was tagged 2023-03-01 but a proper release was never created (release workflow did not run)
+
+## [0.8.2] - 2022-11-26
+
+- Build RPM packages for Fedora 37
+- Build DEB packages for Ubuntu 22.04
+- Locks around socket writes
+- Default systemd service file uses /etc/amqproxy.ini
+- Set a connection name on upstream connections
+
+## [0.8.1] - 2022-11-16
+
+- New amq-protocol.cr without a StringPool, which in many cases caused a memory leak
+
+## [0.8.0] - 2022-11-15
+
+- Prevent race conditions by using more locks
+- Don't disable nagles algorithm (TCP no delay), connections are faster with the algorithm enabled
+- idle_connection_timeout can be specificed as an environment variable
+- Container image uses libssl1.1 (from libssl3 which isn't fully supported)
+
+## [0.7.0] - 2022-08-02
+
+- Inform clients of product and version via Start frame
+- Check upstream connection before lending it out
+- Graceful shutdown, waiting for connections to close
+- Don't try to reuse channels closed by server for new connections
+- Notify upstream that consumer cancellation is supported
+- Reuse a single TLS context for all upstream TLS connections, saves memory
+- Fixed broken OpenSSL in the Docker image
 
 ## [0.6.1] - 2022-07-14
 

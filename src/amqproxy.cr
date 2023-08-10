@@ -10,7 +10,7 @@ class AMQProxy::CLI
   @listen_address = ENV["LISTEN_ADDRESS"]? || "localhost"
   @listen_port = ENV["LISTEN_PORT"]? || 5673
   @log_level : Logger::Severity = Logger::INFO
-  @idle_connection_timeout = 5
+  @idle_connection_timeout : Int32 = ENV.fetch("IDLE_CONNECTION_TIMEOUT", "5").to_i
   @upstream = ENV["AMQP_URL"]?
   @statsd_host = ""
   @statsd_port = 8125
@@ -71,9 +71,9 @@ class AMQProxy::CLI
     end
 
     @upstream ||= ARGV.shift?
-    abort p.to_s if @upstream.nil?
+    upstream_url = @upstream || abort p.to_s
 
-    u = URI.parse @upstream.not_nil!
+    u = URI.parse upstream_url
     abort "Invalid upstream URL" unless u.host
     default_port =
       case u.scheme

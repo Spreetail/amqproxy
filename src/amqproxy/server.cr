@@ -23,6 +23,7 @@ module AMQProxy
         io << datetime << ": " unless journald
         io << message
       end
+      @clients_lock = Mutex.new
       @clients = Array(Client).new
       @pool = Pool.new(upstream_host, upstream_port, upstream_tls, @log, idle_connection_timeout, @metrics_client)
       @log.info "Proxy upstream: #{upstream_host}:#{upstream_port} #{upstream_tls ? "TLS" : ""}"
@@ -51,9 +52,13 @@ module AMQProxy
     end
 
     def disconnect_clients
-      @clients.each &.close        # send Connection#Close frames
-      sleep 1                      # wait for clients to disconnect voluntarily
-      @clients.each &.close_socket # close sockets forcefully
+      @clients_lock.synchronize do
+        @clients.each &.close # send Connection#Close frames
+      end
+      sleep 1 # wait for clients to disconnect voluntarily
+      @clients_lock.synchronize do
+        @clients.each &.close_socket # close sockets forcefully
+      end
     end
 
     private def handle_connection(socket, remote_address)
@@ -67,15 +72,12 @@ module AMQProxy
       vhost, user, password = Client.negotiate(socket)
       c = Client.new(socket)
       active_client(c) do
-        @pool.borrow(user, password, vhost) do |u|
+        @pool.borrow(user, password, vhost, c) do |u|
           # print "\r#{@clients.size} clients\t\t #{@pool.size} upstreams"
           @metrics_client.gauge("connections.client.total", client_connections)
           @metrics_client.increment("connections.client.created", 1)
           u.current_client = c
           c.read_loop(u)
-        ensure
-          u.current_client = nil
-          u.client_disconnected
         end
       rescue ex : Upstream::AccessError
         @log.error { "Access refused for user '#{user}' to vhost '#{vhost}', reason: #{ex.message}" }
@@ -89,6 +91,10 @@ module AMQProxy
         close = AMQ::Protocol::Frame::Connection::Close.new(403_u16, "UPSTREAM_ERROR", 0_u16, 0_u16)
         close.to_io socket, IO::ByteFormat::NetworkEndian
         socket.flush
+      rescue ex : IO::Error
+        @log.error { "IO Error for user '#{user}' to vhost '#{vhost}': #{ex.message}" }
+        close = AMQ::Protocol::Frame::Connection::Close.new(403_u16, "IO_ERROR", 0_u16, 0_u16)
+        close.to_io socket, IO::ByteFormat::NetworkEndian
       end
     rescue ex : Client::Error
       @log.debug { "Client disconnected: #{remote_address}: #{ex.inspect}" }
@@ -101,10 +107,14 @@ module AMQProxy
     end
 
     private def active_client(client)
-      @clients << client
+      @clients_lock.synchronize do
+        @clients << client
+      end
       yield client
     ensure
-      @clients.delete client
+      @clients_lock.synchronize do
+        @clients.delete client
+      end
     end
   end
 end

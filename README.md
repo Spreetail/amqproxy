@@ -10,7 +10,6 @@ Only "safe" channels are reused, that is channels where only Basic Publish or Ba
 
 In our benchmarks publishing one message per connection to a server (using TLS) with a round-trip latency of 50ms, takes on avarage 0.01s using the proxy and 0.50s without. You can read more about the proxy here [Maintaining long-lived connections with AMQProxy](https://www.cloudamqp.com/blog/2019-05-29-maintaining-long-lived-connections-with-AMQProxy.html)
 
-
 ## Installation
 
 ### Debian/Ubuntu
@@ -33,6 +32,8 @@ Docker images are published at [Docker Hub](https://hub.docker.com/r/cloudamqp/a
 docker run --rm -it -p 5673:5673 cloudamqp/amqproxy amqp://SERVER:5672
 ```
 
+Note: If you are running the upstream server on localhost then you will have to add the `--network host` flag to the docker run command.
+
 Then from your AMQP client connect to localhost:5673, it will resuse connections made to the upstream. The AMQP_URL should only include protocol, hostname and port (only if non default, 5672 for AMQP and 5671 for AMQPS). Any username, password or vhost will be ignored, and it's up to the client to provide them.
 
 ## Installation (from source)
@@ -48,3 +49,37 @@ systemctl start amqproxy
 ```
 
 You probably want to modify `/etc/systemd/system/amqproxy.service` and configure another upstream host.
+
+
+## Configuration
+
+### Available settings
+
+| Setting                 | Description                                                                                                                                                                                                                                                                                                                                                                     | Command line                                | Environment variable      | Config file setting                              | Default value |
+|-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------|---------------------------|--------------------------------------------------|---------------|
+| Listen address          | Address to listen on. This is the hostname/IP address which will be the target of clients                                                                                                                                                                                                                                                                                       | `--listen` / `-l`                           | `LISTEN_ADDRESS`          | `[listen] > address` or `[listen] > bind` | `localhost`   |
+| Listen port             | Port to listen on. This is the port which will be the target of clients                                                                                                                                                                                                                                                                                                         | `--port` / `-p`                             | `LISTEN_PORT`             | `[listen] > port`                             | `5673`        |
+| Log level               | Controls log verbosity.<br><br>Available levels (see [84codes/logger.cr](https://github.com/84codes/logger.cr/blob/main/src/logger.cr#L86)):<br> - `DEBUG`: Low-level information for developers<br> - `INFO`: Generic (useful) information about system operation<br> - `WARN`: Warnings<br> - `ERROR`: Handleable error conditions<br> - `FATAL`: Unhandleable errors that results in a program crash | `--debug` / `-d`: Sets the level to `DEBUG` | -                         | `[main] > log_level`                         | `INFO`          |
+| Idle connection timeout | Maximum time in seconds an unused pooled connection stays open                                                                                                                                                                                                                                                                                                                  | `--idle-connection-timeout` / `-t`          | `IDLE_CONNECTION_TIMEOUT` | `[main] > idle_connection_timeout`           | `5`           |
+| Upstream                | AMQP URL that points to the upstream RabbitMQ server to which the proxy should connect to. May only contain scheme, host & port (optional). Example: `amqps://rabbitmq.example.com`                                                                                                                                                                                             | Pass as argument after all options          | `AMQP_URL`                | `[main] > upstream`                          |               |
+
+### How to configure
+
+There are three ways to configure the AMQProxy.
+* Environment variables
+* Passing options & argument via the command line
+  * Usage: `amqproxy [options] [amqp upstream url]`
+  * Additional options, that are not mentioned in the table above:
+    * `--config` / `-c`: Load config file at given path
+    * `--help` / `-h`: Shows help
+    * `--version` / `-v`: Displays AMQProxy version
+* Config file
+  * You can find an example at [config/example.ini](config/example.ini)
+
+#### Precedence
+1. Config file
+2. Command line options & argument
+3. Environment variables
+
+Settings that are avilable in the config file will override the corresponding command line options. A command line option will override the corresponding environment variable. And so on.
+The different configuration approaches can also be mixed.
